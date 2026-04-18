@@ -1,4 +1,4 @@
-# lab_5_code
+# Mobile Application Project MindSync
 
 A new Flutter project.
 
