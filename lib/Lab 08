@@ -1,0 +1,622 @@
+import 'package:flutter/material.dart';
+import 'login_screen.dart';
+
+class WelcomeScreen extends StatelessWidget {
+  const WelcomeScreen({super.key, required this.onGetStarted});
+
+  final VoidCallback onGetStarted;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFEDE8FA),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Skip Button
+            Positioned(
+              top: 16,
+              right: 20,
+              child: TextButton(
+                onPressed: () {
+                  onGetStarted();
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (_) => const LoginScreen(),
+                    ),
+                  );
+                },
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+                child: const Text(
+                  'Skip',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF6F39E8),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+
+            // Main Content
+            LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 20),
+
+                        // Logo Container with overlapping circles
+                        Container(
+                          width: 160,
+                          height: 160,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.4),
+                            borderRadius: BorderRadius.circular(44),
+                          ),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Main circle
+                              Container(
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [Color(0xFF6F39E8), Color(0xFF8B5CF6)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(40),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF6F39E8).withOpacity(0.3),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.psychology,
+                                  color: Colors.white,
+                                  size: 36,
+                                ),
+                              ),
+                              // Overlapping small circle
+                              Positioned(
+                                right: 20,
+                                bottom: 20,
+                                child: Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [Color(0xFF0E9186), Color(0xFF14B8A6)],
+                                    ),
+                                    borderRadius: BorderRadius.circular(28),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF0E9186).withOpacity(0.3),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.insights,
+                                    size: 24,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // App Title
+                        const Text(
+                          'MindSync',
+                          style: TextStyle(
+                            fontSize: 40,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF6F39E8),
+                            height: 1.0,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // Subtitle
+                        const Text(
+                          'AI-Powered Emotional Wellness',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Color(0xFF686A76),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+
+                        const SizedBox(height: 36),
+
+                        // Divider line
+                        Container(
+                          width: 60,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD9D7E4),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+
+                        const SizedBox(height: 28),
+
+                        // Personalized Insight Card
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(32),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.04),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFE8F0FE),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.auto_awesome,
+                                      color: Color(0xFF3A74D9),
+                                      size: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  const Text(
+                                    'PERSONALIZED INSIGHT',
+                                    style: TextStyle(
+                                      letterSpacing: 1.2,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 11,
+                                      color: Color(0xFF2E5FB8),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              const Text(
+                                '"The first step towards wellness is understanding the rhythm of your heart and mind."',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  height: 1.45,
+                                  color: Color(0xFF2B2D39),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        // Get Started Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 60,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              onGetStarted();
+                              Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(
+                                  builder: (_) => const LoginScreen(),
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              elevation: 0,
+                              foregroundColor: Colors.white,
+                              backgroundColor: const Color(0xFF6F39E8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(40),
+                              ),
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Get Started',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+                                Icon(Icons.arrow_forward_rounded, size: 20),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Terms of Service Text
+                        const Text(
+                          'By continuing, you agree to our Terms of Service',
+                          style: TextStyle(
+                            color: Color(0xFF8E909C),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+// login screen
+import 'package:flutter/material.dart';
+import '../main_shell_screen.dart';
+import '../../services/local_auth_service.dart';
+import '../../services/screen_time_service.dart';
+import 'signup_screen.dart';
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _auth = LocalAuthService();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    if (email.isEmpty || password.isEmpty) {
+      _show('Please enter email and password.');
+      return;
+    }
+    setState(() => _loading = true);
+    final user = await _auth.login(email, password);
+    if (!mounted) return;
+    if (user == null) {
+      setState(() => _loading = false);
+      _show('Invalid email or password. Please sign up first.');
+      return;
+    }
+
+    final verified = user.faceImageData.isNotEmpty;
+    ScreenTimeService.instance.setFaceVerified(verified);
+    ScreenTimeService.instance.start();
+    setState(() => _loading = false);
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const MainShellScreen()),
+    );
+  }
+
+  void _show(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF6F6FA),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
+          child: Column(
+            children: [
+              const SizedBox(height: 12),
+              const CircleAvatar(
+                radius: 31,
+                backgroundColor: Color(0xFF6F39E8),
+                child: Icon(Icons.psychology, color: Colors.white, size: 32),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'MindSync',
+                style: TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF6F39E8),
+                  height: 1.0,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'The Sanctuary for your Mind',
+                style: TextStyle(fontSize: 17, color: Color(0xFF7A7C89)),
+              ),
+              const SizedBox(height: 22),
+              _AuthField(hint: 'Email Address', controller: _emailController),
+              const SizedBox(height: 14),
+              _AuthField(
+                hint: 'Password',
+                controller: _passwordController,
+                obscure: true,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: Checkbox(value: false, onChanged: (_) {}),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('Remember me', style: TextStyle(fontSize: 14.5)),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {},
+                    child: const Text(
+                      'Forgot password?',
+                      style: TextStyle(
+                        color: Color(0xFF6F39E8),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 58,
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _login,
+                  style: ElevatedButton.styleFrom(
+                    elevation: 8,
+                    shadowColor: const Color(0x4D6F39E8),
+                    foregroundColor: Colors.white,
+                    backgroundColor: const Color(0xFF6F39E8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  child: Text(
+                    _loading ? 'Logging in...' : 'Login',
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    "Don't have an account?",
+                    style: TextStyle(fontSize: 13, color: Color(0xFF727583)),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const SignupScreen()),
+                      );
+                    },
+                    child: const Text(
+                      'Create account',
+                      style: TextStyle(
+                        color: Color(0xFF6F39E8),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Row(
+                children: [
+                  Expanded(child: Divider(color: Color(0xFFDCDEE4))),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      'OR CONTINUE WITH',
+                      style: TextStyle(color: Color(0xFF9D9FAA), fontSize: 12),
+                    ),
+                  ),
+                  Expanded(child: Divider(color: Color(0xFFDCDEE4))),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _SocialButton(
+                title: 'Continue with Google',
+                background: Colors.white,
+                textColor: const Color(0xFF2A2D3A),
+                icon: Icons.g_mobiledata_rounded,
+              ),
+              const SizedBox(height: 12),
+              _SocialButton(
+                title: 'Apple',
+                background: const Color(0xFF131923),
+                textColor: Colors.white,
+              ),
+              const SizedBox(height: 6),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthField extends StatelessWidget {
+  const _AuthField({
+    required this.hint,
+    required this.controller,
+    this.obscure = false,
+  });
+  final String hint;
+  final TextEditingController controller;
+  final bool obscure;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Color(0xFF9093A1), fontSize: 15),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        filled: true,
+        fillColor: const Color(0xFFF0F2F6),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(22),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+}
+
+class _SocialButton extends StatelessWidget {
+  const _SocialButton({
+    required this.title,
+    required this.background,
+    required this.textColor,
+    this.icon,
+  });
+
+  final String title;
+  final Color background;
+  final Color textColor;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: 54,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(27),
+        border: Border.all(color: const Color(0xFFE4E5EC)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: textColor, size: 24),
+            const SizedBox(width: 10),
+          ],
+          Text(
+            title,
+            style: TextStyle(
+              color: textColor,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// home screen
+import 'package:flutter/material.dart';
+import 'tabs/analytics_screen.dart';
+import 'tabs/chat_screen.dart';
+import 'tabs/home_screen.dart';
+import 'tabs/more_screen.dart';
+import 'tabs/parent_screen.dart';
+
+class MainShellScreen extends StatefulWidget {
+  const MainShellScreen({super.key, this.initialTab = 0});
+
+  final int initialTab;
+
+  @override
+  State<MainShellScreen> createState() => _MainShellScreenState();
+}
+
+class _MainShellScreenState extends State<MainShellScreen> {
+  late int selectedTab;
+
+  @override
+  void initState() {
+    super.initState();
+    final tab = widget.initialTab;
+    selectedTab = tab < 0
+        ? 0
+        : tab > 4
+            ? 4
+            : tab;
+  }
+  @override
+  Widget build(BuildContext context) {
+    final pages = <Widget>[
+      const HomeScreen(),
+      const AnalyticsScreen(),
+      const ParentScreen(),
+      const ChatScreen(),
+      const MoreScreen(),
+    ];
+    return Scaffold(
+      body: pages[selectedTab],
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: selectedTab,
+        onDestinationSelected: (value) => setState(() => selectedTab = value),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.auto_graph), label: 'Analytics'),
+          NavigationDestination(icon: Icon(Icons.groups), label: 'Parent'),
+          NavigationDestination(icon: Icon(Icons.chat), label: 'Chat'),
+          NavigationDestination(icon: Icon(Icons.more_horiz), label: 'More'),
+        ],
+      ),
+    );
+  }
+}
