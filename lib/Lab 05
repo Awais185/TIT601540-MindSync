@@ -1,0 +1,452 @@
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'MindSync',
+      theme: ThemeData(primarySwatch: Colors.deepPurple),
+      home: const WelcomeScreen(),
+      debugShowCheckedModeBanner: false,
+    );
+  }
+}
+
+// --- WELCOME SCREEN ---
+class WelcomeScreen extends StatelessWidget {
+  const WelcomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              const SizedBox(height: 40),
+              // Logo Container
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.psychology,
+                  size: 80,
+                  color: Colors.deepPurple,
+                ),
+              ),
+              const SizedBox(height: 40),
+              // Title
+              const Text(
+                'Welcome to\nMindSync',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 36,
+                  fontWeight: FontWeight.bold,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Subtitle
+              const Text(
+                'Your personal mental wellness companion. Track your mood, habits, and screen time to stay balanced.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18, height: 1.4, color: Colors.grey),
+              ),
+              const SizedBox(height: 50),
+              // Features
+              _buildFeature(Icons.emoji_emotions, 'Emotion Detection'),
+              const SizedBox(height: 20),
+              _buildFeature(Icons.bar_chart, 'Habit Tracking'),
+              const SizedBox(height: 20),
+              _buildFeature(Icons.phone_android, 'Screen Time Analysis'),
+              const Spacer(),
+              // Get Started Button
+              GestureDetector(
+                onTap: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  decoration: BoxDecoration(
+                    color: Colors.deepPurple,
+                    borderRadius: BorderRadius.circular(50),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Get Started',
+                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(width: 12),
+                      Icon(Icons.arrow_forward, color: Colors.white),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Log In Text
+              GestureDetector(
+                onTap: () {},
+                child: const Text(
+                  'Already have an account? Log In',
+                  style: TextStyle(
+                    color: Colors.deepPurple,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 30),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeature(IconData icon, String title) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, size: 32, color: Colors.deepPurple),
+        ),
+        const SizedBox(width: 20),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+  }
+}
+
+// --- LOGIN SCREEN ---
+class LoginScreen extends StatelessWidget {
+  const LoginScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              const SizedBox(height: 60),
+              const Text(
+                'Welcome Back',
+                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 50),
+              // Email Field
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: TextField(
+                    decoration: InputDecoration(border: InputBorder.none, hintText: 'Email'),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Password Field
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: TextField(
+                    obscureText: true,
+                    decoration: InputDecoration(border: InputBorder.none, hintText: 'Password'),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 30),
+              // Login Button
+              GestureDetector(
+                onTap: () {},
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  decoration: BoxDecoration(
+                    color: Colors.blue,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'LOGIN',
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Sign Up Text
+              GestureDetector(
+                onTap: () {},
+                child: RichText(
+                  text: const TextSpan(
+                    style: TextStyle(fontSize: 16, color: Colors.black),
+                    children: [
+                      TextSpan(text: "Don't have an account? "),
+                      TextSpan(
+                        text: 'Sign Up',
+                        style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+// --- HOME / DASHBOARD SCREEN ---
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey.shade50,
+      body: SingleChildScrollView(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'MindSync',
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                    ),
+                    const Icon(Icons.person_outline),
+                  ],
+                ),
+                const SizedBox(height: 30),
+                
+                // Stats Cards Grid
+                Row(
+                  children: [
+                    const Expanded(
+                      child: StatCard(
+                        icon: Icons.psychology,
+                        iconColor: Colors.purple,
+                        value: '78/100',
+                        label: 'Mental Health',
+                        change: '+5%',
+                        changeColor: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: StatCard(
+                        icon: Icons.phone_android,
+                        iconColor: Colors.blue,
+                        value: '6h 12m',
+                        label: 'Screen Time',
+                        change: '-12%',
+                        changeColor: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: StatCard(
+                        icon: Icons.bolt,
+                        iconColor: Colors.green,
+                        value: 'Low',
+                        label: 'Stress Level',
+                        change: 'Better',
+                        changeColor: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: StatCard(
+                        icon: Icons.warning_amber,
+                        iconColor: Colors.red,
+                        value: '2',
+                        label: 'Active Alerts',
+                        change: 'Action',
+                        changeColor: Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Activity Monitor Section
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(color: Colors.grey.shade200, blurRadius: 15),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Activity Monitor',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                      const Text(
+                        'Real-time usage tracking',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        "Today's Activity",
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: const [
+                          ActivityItem(icon: Icons.phone_android, value: '6h 12m', label: 'Screen Time'),
+                          ActivityItem(icon: Icons.chat_bubble_outline, value: '12', label: 'Messages'),
+                          ActivityItem(icon: Icons.camera_alt_outlined, value: '5', label: 'App Opens'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0,
+        selectedItemColor: Colors.deepPurple,
+        unselectedItemColor: Colors.grey,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.analytics), label: 'Analytics'),
+          BottomNavigationBarItem(icon: Icon(Icons.shield), label: 'Parent'),
+          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
+          BottomNavigationBarItem(icon: Icon(Icons.more_horiz), label: 'More'),
+        ],
+      ),
+    );
+  }
+}
+
+// Custom Stat Card Widget [cite: 551]
+class StatCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String value;
+  final String label;
+  final String change;
+  final Color changeColor;
+
+  const StatCard({
+    required this.icon,
+    required this.iconColor,
+    required this.value,
+    required this.label,
+    required this.change,
+    required this.changeColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: Colors.grey.shade200, blurRadius: 15),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: iconColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: iconColor, size: 24),
+              ),
+              Row(
+                children: [
+                  Icon(Icons.trending_up, color: changeColor, size: 14),
+                  const SizedBox(width: 4),
+                  Text(change, style: TextStyle(color: changeColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+}
+
+// Custom Activity Item Widget [cite: 518]
+class ActivityItem extends StatelessWidget {
+  final IconData icon;
+  final String value;
+  final String label;
+
+  const ActivityItem({required this.icon, required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.grey),
+        const SizedBox(height: 8),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+      ],
+    );
+  }
+}
