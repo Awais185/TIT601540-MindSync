@@ -1,0 +1,198 @@
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(MyApp()); // 
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: WelcomeScreen(),
+    ); // 
+  }
+}
+
+// --- WELCOME SCREEN ---
+class WelcomeScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('MindSync'),
+        centerTitle: true,
+      ), // 
+      body: Padding(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(height: 20),
+            CustomImage(), // 
+            SizedBox(height: 20),
+            Text(
+              'Welcome to MindSync',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+            ), // 
+            SizedBox(height: 15),
+            Text(
+              'Your personal mental wellness companion. Track your mood, habits, and screen time.',
+              textAlign: TextAlign.center,
+            ), // 
+            SizedBox(height: 30),
+            // Features
+            Row(children: [Icon(Icons.sentiment_satisfied), SizedBox(width: 15), Text('Emotion Detection')]),
+            SizedBox(height: 15),
+            Row(children: [Icon(Icons.bar_chart), SizedBox(width: 15), Text('Habit Tracking')]),
+            SizedBox(height: 15),
+            Row(children: [Icon(Icons.phone_android), SizedBox(width: 15), Text('Screen Time Analysis')]),
+            Spacer(),
+            CustomButton(), // 
+            SizedBox(height: 15),
+            Text('Already have an account? Log In', style: TextStyle(color: Colors.purple)),
+          ],
+        ),
+      ),
+    ); // 
+  }
+}
+
+// --- CREATE ACCOUNT SCREEN ---
+class CreateAccountScreen extends StatefulWidget {
+  @override
+  State<CreateAccountScreen> createState() => _CreateAccountScreenState();
+}
+
+class _CreateAccountScreenState extends State<CreateAccountScreen> {
+  String profession = "Student"; // 
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("Create Account"), centerTitle: true),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Expanded(child: TextField(decoration: InputDecoration(hintText: "First Name", border: OutlineInputBorder()))),
+              SizedBox(width: 10),
+              Expanded(child: TextField(decoration: InputDecoration(hintText: "Last Name", border: OutlineInputBorder()))),
+            ]), // 
+            SizedBox(height: 15),
+            TextField(decoration: InputDecoration(hintText: "Username", border: OutlineInputBorder())),
+            SizedBox(height: 15),
+            TextField(decoration: InputDecoration(hintText: "Email", border: OutlineInputBorder())),
+            SizedBox(height: 15),
+            TextField(obscureText: true, decoration: InputDecoration(hintText: "Password", border: OutlineInputBorder())),
+            SizedBox(height: 20),
+            Text("Profession", style: TextStyle(fontSize: 18)),
+            Row(children: [
+              ChoiceChip(label: Text("Student"), selected: profession == "Student", onSelected: (val) => setState(() => profession = "Student")),
+              SizedBox(width: 10),
+              ChoiceChip(label: Text("Professional"), selected: profession == "Professional", onSelected: (val) => setState(() => profession = "Professional")),
+            ]), // 
+            SizedBox(height: 20),
+            // Face Enrollment Placeholder
+            Container(
+              width: double.infinity,
+              height: 100,
+              decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(12)),
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.camera_alt), Text("Enroll Face (Required)")]),
+            ), // 
+            SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, minimumSize: Size(double.infinity, 50)),
+              onPressed: () {},
+              child: Text("Sign Up", style: TextStyle(color: Colors.white)),
+            ), // 
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- DASHBOARD / ACTIVITY MONITOR ---
+class DashboardScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("MindSync")),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(children: [
+              Expanded(child: _buildStatCard(Icons.favorite, "78/100", "Wellbeing Score", Colors.teal)),
+              SizedBox(width: 10),
+              Expanded(child: _buildStatCard(Icons.phone_android, "0m", "Screen Time", Colors.purple)),
+            ]), // 
+            SizedBox(height: 20),
+            Container(
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade300)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Activity Monitor", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text("Real-time usage tracking"),
+                  SizedBox(height: 15),
+                  // Today's Activity Box
+                  Container(
+                    padding: EdgeInsets.all(16),
+                    color: Colors.grey.shade100,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildActivityItem(Icons.phone_android, "6h", "Screen Time"),
+                        _buildActivityItem(Icons.chat_bubble, "12", "Messages"),
+                      ],
+                    ),
+                  ), // 
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard(IconData icon, String value, String label, Color color) {
+    return Container(
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: color),
+        Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey)),
+      ]),
+    ); // 
+  }
+
+  Widget _buildActivityItem(IconData icon, String value, String label) {
+    return Column(children: [Icon(icon), Text(value, style: TextStyle(fontWeight: FontWeight.bold)), Text(label, style: TextStyle(fontSize: 10))]);
+  }
+}
+
+// Widgets for Welcome Screen
+class CustomImage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(height: 120, width: 120, color: Colors.grey.shade300, child: Icon(Icons.psychology, size: 60));
+  }
+}
+
+class CustomButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ElevatedButton(
+      onPressed: () {}, 
+      child: Text("Get Started"),
+    ); // 
+  }
+}
