@@ -1,0 +1,173 @@
+// page 1
+import 'package:flutter/material.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: WelcomeScreen(),
+    ); // MaterialApp
+  }
+}
+
+class WelcomeScreen extends StatefulWidget {
+  const WelcomeScreen({super.key});
+
+  @override
+  State<WelcomeScreen> createState() => _WelcomeScreenState();
+}
+
+class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this, 
+      duration: const Duration(seconds: 2)
+    );
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: FadeTransition(
+        opacity: _animation,
+        child: ScaleTransition(
+          scale: _animation,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.psychology, size: 100, color: Colors.deepPurple),
+                SizedBox(height: 20),
+                Text(
+                  "MindSync",
+                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+                ), // Text
+              ],
+            ), // Column
+          ), // Center
+        ), // ScaleTransition
+      ), // FadeTransition
+    ); // Scaffold
+  }
+}
+
+// page 2
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => LoginScreenState();
+}
+
+class LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fade;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this, 
+      duration: const Duration(seconds: 2)
+    );
+    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
+    _controller.forward();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: FadeTransition(
+        opacity: _fade,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text(
+                "Welcome Back",
+                style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold)
+              ), // Text
+              const SizedBox(height: 30),
+              const TextField(decoration: InputDecoration(hintText: "Email")),
+              const SizedBox(height: 10),
+              const TextField(
+                obscureText: true,
+                decoration: InputDecoration(hintText: "Password")
+              ), // TextField
+              const SizedBox(height: 20),
+              ElevatedButton(onPressed: () {}, child: const Text("LOGIN"))
+            ],
+          ), // Column
+        ), // Padding
+      ), // FadeTransition
+    ); // Scaffold
+  }
+}
+
+// page 3
+class AnalyticsScreen extends StatefulWidget {
+  const AnalyticsScreen({super.key});
+
+  @override
+  State<AnalyticsScreen> createState() => AnalyticsScreenState();
+}
+
+class AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this, 
+      duration: const Duration(seconds: 2)
+    );
+    slide = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeIn)
+    );
+    _controller.forward();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Analytics")),
+      body: FadeTransition(
+        opacity: slide,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: const [
+            ListTile(
+              leading: Icon(Icons.monitor_heart),
+              title: Text("Wellbeing Score: 78"),
+            ), // ListTile
+            ListTile(
+              leading: Icon(Icons.phone_android),
+              title: Text("Screen Time: 0m"),
+            ), // ListTile
+          ],
+        ), // ListView
+      ), // FadeTransition
+    ); // Scaffold
+  }
+}
