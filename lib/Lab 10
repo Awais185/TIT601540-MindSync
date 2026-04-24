@@ -1,0 +1,119 @@
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'MindSync Lab 10',
+      theme: ThemeData(primarySwatch: Colors.deepPurple),
+      home: const MindSyncLab10(),
+    );
+  }
+}
+
+class MindSyncLab10 extends StatelessWidget {
+  const MindSyncLab10({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      // --- DRAWER SECTION ---
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            const UserAccountsDrawerHeader(
+              decoration: BoxDecoration(color: Colors.deepPurple),
+              accountName: Text("Awais Ali Raza",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              accountEmail: Text("awais@mindsync.com"),
+              currentAccountPicture: CircleAvatar(
+                backgroundColor: Colors.white,
+                child: Icon(Icons.person, color: Colors.deepPurple),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text("Home"),
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+
+      // --- BODY WITH SLIVERS ---
+      body: CustomScrollView(
+        slivers: <Widget>[
+          const SliverAppBar(
+            expandedHeight: 150.0,
+            pinned: true,
+            flexibleSpace: FlexibleSpaceBar(
+              title: Text("MindSync Monitor"),
+              background: ColoredBox(color: Colors.deepPurple),
+            ),
+          ),
+
+          // Calling the custom Grid Widget from Lab 10 manual
+          const SliverGridWidget(),
+
+          // Extra List to show scrolling
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => ListTile(
+                leading: const Icon(Icons.task_alt, color: Colors.green),
+                title: Text("MindSync Activity ${index + 1}"),
+              ),
+              childCount: 10,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- EXACT CODE FROM LAB 10 MANUAL ---
+class SliverGridWidget extends StatelessWidget {
+  const SliverGridWidget({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverSafeArea(
+      sliver: SliverGrid(
+        delegate: SliverChildBuilderDelegate(
+          (BuildContext context, int index) {
+            return Card(
+              elevation: 4,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  const Icon(
+                    Icons.psychology, // MindSync Theme Icon
+                    size: 48.0,
+                    color: Colors.deepPurple,
+                  ),
+                  const Divider(),
+                  Text(
+                    'Grid ${index + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            );
+          },
+          childCount: 12, // As per Lab 10 manual
+        ),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3, // Three tiles as per Lab 10 manual
+        ),
+      ),
+    );
+  }
+}
