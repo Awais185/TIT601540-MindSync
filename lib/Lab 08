@@ -1,3 +1,4 @@
+// Lab 8 of MAD
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
 
@@ -13,10 +14,10 @@ class WelcomeScreen extends StatelessWidget {
       body: SafeArea(
         child: Stack(
           children: [
-            // Skip Button
             Positioned(
               top: 16,
               right: 20,
+              left: 1,
               child: TextButton(
                 onPressed: () {
                   onGetStarted();
