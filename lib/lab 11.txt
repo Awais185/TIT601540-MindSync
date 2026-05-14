@@ -1,0 +1,644 @@
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
+
+
+abstract final class ApiConfig {
+  ApiConfig._();
+
+  static const String _webLocal = 'http://127.0.0.1:8000';
+  static const String _androidEmulator = 'http://10.0.2.2:8000';
+
+  /// Laptop LAN IP for physical phones (override with `DEV_LAN_HOST`).
+  static const String _lanHost = String.fromEnvironment(
+    'DEV_LAN_HOST',
+    defaultValue: '172.24.168.80',
+  );
+
+  static const String _defineBackend = String.fromEnvironment(
+    'BACKEND_BASE_URL',
+    defaultValue: '',
+  );
+
+  static const String _defineApiUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: '',
+  );
+
+  static late final String baseUrl;
+
+  static Future<void> initialize() async {
+    baseUrl = await _resolve();
+  }
+
+  static Future<String> _resolve() async {
+    for (final raw in [_defineBackend, _defineApiUrl]) {
+      final t = raw.trim();
+      if (t.isNotEmpty) {
+        return _stripTrailingSlash(t);
+      }
+    }
+
+    if (kIsWeb) {
+      return _webLocal;
+    }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.android:
+        final android = await DeviceInfoPlugin().androidInfo;
+        if (!android.isPhysicalDevice) {
+          return _androidEmulator;
+        }
+        return 'http://$_lanHost:8000';
+      case TargetPlatform.iOS:
+        final ios = await DeviceInfoPlugin().iosInfo;
+        if (!ios.isPhysicalDevice) {
+          return _webLocal;
+        }
+        return 'http://$_lanHost:8000';
+      default:
+        return _webLocal;
+    }
+  }
+
+  static String _stripTrailingSlash(String url) {
+    if (url.endsWith('/')) {
+      return url.substring(0, url.length - 1);
+    }
+    return url;
+  }
+
+  /// [path] should start with `/`, e.g. `/api/auth/login/`.
+  static Uri uri(String path) {
+    final p = path.startsWith('/') ? path : '/$path';
+    return Uri.parse('$baseUrl$p');
+  }
+}
+
+
+
+
+
+
+Service Subscription plan code
+
+
+
+
+
+
+
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../config/api_config.dart';
+
+class SubscriptionPlanModel {
+  final int id;
+  final String name;
+  final String code;
+  final double priceUsd;
+  final String billingCycle;
+  final List<String> features;
+  final bool isActive;
+
+  const SubscriptionPlanModel({
+    required this.id,
+    required this.name,
+    required this.code,
+    required this.priceUsd,
+    required this.billingCycle,
+    required this.features,
+    required this.isActive,
+  });
+
+  bool get isFree => code.toLowerCase() == 'free' || priceUsd <= 0;
+
+  factory SubscriptionPlanModel.fromJson(Map<String, dynamic> json) {
+    return SubscriptionPlanModel(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: (json['name'] ?? '').toString(),
+      code: (json['code'] ?? '').toString(),
+      priceUsd: double.tryParse((json['price_usd'] ?? '0').toString()) ?? 0,
+      billingCycle: (json['billing_cycle'] ?? 'monthly').toString(),
+      features: (json['features'] as List<dynamic>? ?? const [])
+          .map((e) => e.toString())
+          .toList(),
+      isActive: (json['is_active'] as bool?) ?? true,
+    );
+  }
+}
+
+class CurrentSubscriptionModel {
+  final String effectivePlanCode;
+  final String status;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final bool autoRenew;
+  final SubscriptionPlanModel plan;
+
+  const CurrentSubscriptionModel({
+    required this.effectivePlanCode,
+    required this.status,
+    required this.startDate,
+    required this.endDate,
+    required this.autoRenew,
+    required this.plan,
+  });
+
+  factory CurrentSubscriptionModel.fromJson(Map<String, dynamic> json) {
+    final planJson = (json['plan'] as Map<String, dynamic>? ?? const {});
+    final subscription = (json['subscription'] as Map<String, dynamic>? ?? const {});
+    return CurrentSubscriptionModel(
+      effectivePlanCode: (json['effective_plan_code'] ?? 'free').toString(),
+      status: (json['status'] ?? subscription['status'] ?? 'inactive').toString(),
+      startDate: DateTime.tryParse((subscription['start_date'] ?? '').toString()),
+      endDate: DateTime.tryParse((subscription['end_date'] ?? '').toString()),
+      autoRenew: (subscription['auto_renew'] as bool?) ?? false,
+      plan: SubscriptionPlanModel.fromJson(planJson),
+    );
+  }
+}
+
+class SubscribeResult {
+  final String message;
+  final String paymentIntentId;
+  final String clientSecret;
+  final Map<String, dynamic> orderSummary;
+
+  const SubscribeResult({
+    required this.message,
+    required this.paymentIntentId,
+    required this.clientSecret,
+    required this.orderSummary,
+  });
+
+  factory SubscribeResult.fromJson(Map<String, dynamic> json) {
+    return SubscribeResult(
+      message: (json['message'] ?? '').toString(),
+      paymentIntentId: (json['payment_intent_id'] ?? '').toString(),
+      clientSecret: (json['client_secret'] ?? '').toString(),
+      orderSummary: (json['order_summary'] as Map<String, dynamic>? ?? const {}),
+    );
+  }
+}
+
+class SubscriptionService {
+  SubscriptionService._();
+  static final SubscriptionService instance = SubscriptionService._();
+
+  Future<Map<String, String>?> _authHeaders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth.accessToken') ?? '';
+    if (token.isEmpty) return null;
+    return {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    };
+  }
+
+  Future<List<SubscriptionPlanModel>> getPlans() async {
+    final headers = await _authHeaders();
+    if (headers == null) return const [];
+    final res = await http
+        .get(Uri.parse('${ApiConfig.baseUrl}/api/plans/'), headers: headers)
+        .timeout(const Duration(seconds: 20));
+    if (res.statusCode < 200 || res.statusCode >= 300) return const [];
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return const [];
+    return (decoded['plans'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(SubscriptionPlanModel.fromJson)
+        .toList();
+  }
+
+  Future<CurrentSubscriptionModel?> getCurrentSubscription() async {
+    final headers = await _authHeaders();
+    if (headers == null) return null;
+    final res = await http
+        .get(Uri.parse('${ApiConfig.baseUrl}/api/current-subscription/'), headers: headers)
+        .timeout(const Duration(seconds: 20));
+    if (res.statusCode < 200 || res.statusCode >= 300) return null;
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return null;
+    return CurrentSubscriptionModel.fromJson(decoded);
+  }
+
+  Future<SubscribeResult?> buyOrUpgrade({
+    required int planId,
+    required bool isUpgrade,
+    String paymentGateway = 'stripe',
+    String paymentMethod = 'card',
+    String couponCode = '',
+    bool autoRenew = true,
+  }) async {
+    final headers = await _authHeaders();
+    if (headers == null) return null;
+    final res = await http
+        .post(
+          Uri.parse('${ApiConfig.baseUrl}/api/create-payment/'),
+          headers: headers,
+          body: jsonEncode({
+            'plan_id': planId,
+            'flow': isUpgrade ? 'upgrade' : 'subscribe',
+            'payment_gateway': paymentGateway,
+            'payment_method': paymentMethod,
+            'coupon_code': couponCode,
+            'auto_renew': autoRenew,
+          }),
+        )
+        .timeout(const Duration(seconds: 25));
+    if (res.statusCode < 200 || res.statusCode >= 300) return null;
+    final decoded = jsonDecode(res.body);
+    if (decoded is! Map<String, dynamic>) return null;
+    return SubscribeResult.fromJson(decoded);
+  }
+
+  Future<bool> confirmPayment(String paymentIntentId) async {
+    final headers = await _authHeaders();
+    if (headers == null) return false;
+    final res = await http
+        .post(
+          Uri.parse('${ApiConfig.baseUrl}/api/confirm-payment/'),
+          headers: headers,
+          body: jsonEncode({'payment_intent_id': paymentIntentId}),
+        )
+        .timeout(const Duration(seconds: 20));
+    return res.statusCode >= 200 && res.statusCode < 300;
+  }
+}
+
+
+
+
+
+
+Community service code
+
+
+
+
+
+
+
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../config/api_config.dart';
+
+class CommunityPostItem {
+  const CommunityPostItem({
+    required this.id,
+    required this.content,
+    required this.category,
+    required this.userName,
+    required this.createdAt,
+    required this.likesCount,
+    required this.commentsCount,
+    required this.likedByMe,
+  });
+
+  final int id;
+  final String content;
+  final String category;
+  final String userName;
+  final DateTime createdAt;
+  final int likesCount;
+  final int commentsCount;
+  final bool likedByMe;
+}
+
+class CommunityCommentItem {
+  const CommunityCommentItem({
+    required this.id,
+    required this.content,
+    required this.userName,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String content;
+  final String userName;
+  final DateTime createdAt;
+}
+
+class DoctorItem {
+  const DoctorItem({
+    required this.id,
+    required this.fullName,
+    required this.designation,
+    required this.experienceYears,
+    required this.specialist,
+    required this.contactNumber,
+  });
+
+  final int id;
+  final String fullName;
+  final String designation;
+  final int experienceYears;
+  final String specialist;
+  final String contactNumber;
+}
+
+class TrustedContactItem {
+  const TrustedContactItem({
+    required this.id,
+    required this.name,
+    required this.relationship,
+    required this.contactNumber,
+  });
+
+  final int id;
+  final String name;
+  final String relationship;
+  final String contactNumber;
+}
+
+class DoctorChatMessageItem {
+  const DoctorChatMessageItem({
+    required this.id,
+    required this.sender,
+    required this.message,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String sender;
+  final String message;
+  final DateTime createdAt;
+}
+
+class DoctorInboxItem {
+  const DoctorInboxItem({
+    required this.userId,
+    required this.userName,
+    required this.userEmail,
+    required this.lastMessage,
+    required this.lastSender,
+    required this.lastTime,
+  });
+
+  final int userId;
+  final String userName;
+  final String userEmail;
+  final String lastMessage;
+  final String lastSender;
+  final DateTime lastTime;
+}
+
+class CommunityService {
+  Future<Map<String, String>?> _headers() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth.accessToken');
+    if (token == null || token.isEmpty) return null;
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+  }
+
+  Future<List<CommunityPostItem>> fetchPosts(String category) async {
+    final headers = await _headers();
+    if (headers == null) return const [];
+    final uri = Uri.parse(
+      '${ApiConfig.baseUrl}/api/auth/community/posts/?category=${Uri.encodeQueryComponent(category)}',
+    );
+    final res = await http.get(uri, headers: headers);
+    if (res.statusCode < 200 || res.statusCode >= 300) return const [];
+    final list = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+    return list
+        .map(
+          (it) => CommunityPostItem(
+            id: (it['id'] as num?)?.toInt() ?? 0,
+            content: (it['content'] ?? '').toString(),
+            category: (it['category'] ?? 'other').toString(),
+            userName: (it['user_name'] ?? 'User').toString(),
+            createdAt: DateTime.tryParse((it['created_at'] ?? '').toString()) ?? DateTime.now(),
+            likesCount: (it['likes_count'] as num?)?.toInt() ?? 0,
+            commentsCount: (it['comments_count'] as num?)?.toInt() ?? 0,
+            likedByMe: (it['liked_by_me'] as bool?) ?? false,
+          ),
+        )
+        .toList();
+  }
+
+  Future<bool> createPost({
+    required String content,
+    required String category,
+  }) async {
+    final headers = await _headers();
+    if (headers == null) return false;
+    final res = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/community/posts/'),
+      headers: headers,
+      body: jsonEncode({'content': content.trim(), 'category': category}),
+    );
+    return res.statusCode >= 200 && res.statusCode < 300;
+  }
+
+  Future<bool> toggleLike(int postId) async {
+    final headers = await _headers();
+    if (headers == null) return false;
+    final res = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/community/posts/$postId/like/'),
+      headers: headers,
+      body: jsonEncode({}),
+    );
+    return res.statusCode >= 200 && res.statusCode < 300;
+  }
+
+  Future<List<CommunityCommentItem>> fetchComments(int postId) async {
+    final headers = await _headers();
+    if (headers == null) return const [];
+    final res = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/community/posts/$postId/comments/'),
+      headers: headers,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) return const [];
+    final list = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+    return list
+        .map(
+          (it) => CommunityCommentItem(
+            id: (it['id'] as num?)?.toInt() ?? 0,
+            content: (it['content'] ?? '').toString(),
+            userName: (it['user_name'] ?? 'User').toString(),
+            createdAt: DateTime.tryParse((it['created_at'] ?? '').toString()) ?? DateTime.now(),
+          ),
+        )
+        .toList();
+  }
+
+  Future<bool> addComment({
+    required int postId,
+    required String content,
+  }) async {
+    final headers = await _headers();
+    if (headers == null) return false;
+    final res = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/community/posts/$postId/comments/'),
+      headers: headers,
+      body: jsonEncode({'content': content.trim()}),
+    );
+    return res.statusCode >= 200 && res.statusCode < 300;
+  }
+
+  Future<List<DoctorItem>> fetchDoctors() async {
+    final headers = await _headers();
+    if (headers == null) return const [];
+    final res = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/emergency/doctors/'),
+      headers: headers,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) return const [];
+    final list = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+    return list
+        .map(
+          (it) => DoctorItem(
+            id: (it['id'] as num?)?.toInt() ?? 0,
+            fullName: (it['full_name'] ?? '').toString(),
+            designation: (it['designation'] ?? '').toString(),
+            experienceYears: (it['experience_years'] as num?)?.toInt() ?? 0,
+            specialist: (it['specialist'] ?? '').toString(),
+            contactNumber: (it['contact_number'] ?? '').toString(),
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<TrustedContactItem>> fetchTrustedContacts() async {
+    final headers = await _headers();
+    if (headers == null) return const [];
+    final res = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/emergency/trusted-contacts/'),
+      headers: headers,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) return const [];
+    final list = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+    return list
+        .map(
+          (it) => TrustedContactItem(
+            id: (it['id'] as num?)?.toInt() ?? 0,
+            name: (it['name'] ?? '').toString(),
+            relationship: (it['relationship'] ?? '').toString(),
+            contactNumber: (it['contact_number'] ?? '').toString(),
+          ),
+        )
+        .toList();
+  }
+
+  Future<bool> createTrustedContact({
+    required String name,
+    required String relationship,
+    required String contactNumber,
+  }) async {
+    final headers = await _headers();
+    if (headers == null) return false;
+    final res = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/emergency/trusted-contacts/'),
+      headers: headers,
+      body: jsonEncode({
+        'name': name.trim(),
+        'relationship': relationship.trim(),
+        'contact_number': contactNumber.trim(),
+      }),
+    );
+    return res.statusCode >= 200 && res.statusCode < 300;
+  }
+
+  Future<List<DoctorChatMessageItem>> fetchDoctorChat(int doctorId) async {
+    final headers = await _headers();
+    if (headers == null) return const [];
+    final res = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/emergency/doctors/$doctorId/chat/'),
+      headers: headers,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) return const [];
+    final list = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+    return list
+        .map(
+          (it) => DoctorChatMessageItem(
+            id: (it['id'] as num?)?.toInt() ?? 0,
+            sender: (it['sender'] ?? 'user').toString(),
+            message: (it['message'] ?? '').toString(),
+            createdAt: DateTime.tryParse((it['created_at'] ?? '').toString()) ?? DateTime.now(),
+          ),
+        )
+        .toList();
+  }
+
+  Future<bool> sendDoctorChatMessage({
+    required int doctorId,
+    required String message,
+  }) async {
+    final headers = await _headers();
+    if (headers == null) return false;
+    final res = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/emergency/doctors/$doctorId/chat/'),
+      headers: headers,
+      body: jsonEncode({'message': message.trim()}),
+    );
+    return res.statusCode >= 200 && res.statusCode < 300;
+  }
+
+  Future<List<DoctorInboxItem>> fetchDoctorInbox() async {
+    final headers = await _headers();
+    if (headers == null) return const [];
+    final res = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/doctor/inbox/'),
+      headers: headers,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) return const [];
+    final list = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+    return list
+        .map(
+          (it) => DoctorInboxItem(
+            userId: (it['user_id'] as num?)?.toInt() ?? 0,
+            userName: (it['user_name'] ?? 'User').toString(),
+            userEmail: (it['user_email'] ?? '').toString(),
+            lastMessage: (it['last_message'] ?? '').toString(),
+            lastSender: (it['last_sender'] ?? '').toString(),
+            lastTime: DateTime.tryParse((it['last_time'] ?? '').toString()) ?? DateTime.now(),
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<DoctorChatMessageItem>> fetchDoctorThreadMessages(int userId) async {
+    final headers = await _headers();
+    if (headers == null) return const [];
+    final res = await http.get(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/doctor/inbox/$userId/messages/'),
+      headers: headers,
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) return const [];
+    final list = (jsonDecode(res.body) as List<dynamic>).cast<Map<String, dynamic>>();
+    return list
+        .map(
+          (it) => DoctorChatMessageItem(
+            id: (it['id'] as num?)?.toInt() ?? 0,
+            sender: (it['sender'] ?? 'user').toString(),
+            message: (it['message'] ?? '').toString(),
+            createdAt: DateTime.tryParse((it['created_at'] ?? '').toString()) ?? DateTime.now(),
+          ),
+        )
+        .toList();
+  }
+
+  Future<bool> sendDoctorReply({
+    required int userId,
+    required String message,
+  }) async {
+    final headers = await _headers();
+    if (headers == null) return false;
+    final res = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/api/auth/doctor/inbox/$userId/messages/'),
+      headers: headers,
+      body: jsonEncode({'message': message.trim()}),
+    );
+    return res.statusCode >= 200 && res.statusCode < 300;
+  }
+}
