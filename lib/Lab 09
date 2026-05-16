@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
-
+// Welcome Screen UI
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key, required this.onGetStarted});
 
@@ -50,7 +50,7 @@ class WelcomeScreen extends StatelessWidget {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
                     child: Column(
                       children: [
                         const SizedBox(height: 20),
@@ -124,7 +124,7 @@ class WelcomeScreen extends StatelessWidget {
                           ),
                         ),
 
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
 
                         // App Title
                         const Text(
@@ -170,7 +170,7 @@ class WelcomeScreen extends StatelessWidget {
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.9),
-                            borderRadius: BorderRadius.circular(32),
+                            borderRadius: BorderRadius.circular(34),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withOpacity(0.04),
@@ -228,7 +228,7 @@ class WelcomeScreen extends StatelessWidget {
                         // Get Started Button
                         SizedBox(
                           width: double.infinity,
-                          height: 60,
+                          height: 50,
                           child: ElevatedButton(
                             onPressed: () {
                               onGetStarted();
@@ -315,7 +315,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordController.dispose();
     super.dispose();
   }
-
+// User Login Function
   Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -340,7 +340,7 @@ class _LoginScreenState extends State<LoginScreen> {
       MaterialPageRoute(builder: (_) => const MainShellScreen()),
     );
   }
-
+// Show Error Message
   void _show(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
@@ -378,8 +378,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 style: TextStyle(fontSize: 17, color: Color(0xFF7A7C89)),
               ),
               const SizedBox(height: 22),
+              // Email Input Field
               _AuthField(hint: 'Email Address', controller: _emailController),
               const SizedBox(height: 14),
+              // Password Input Field
               _AuthField(
                 hint: 'Password',
                 controller: _passwordController,
@@ -606,6 +608,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     ];
     return Scaffold(
       body: pages[selectedTab],
+      // Bottom Navigation Bar
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedTab,
         onDestinationSelected: (value) => setState(() => selectedTab = value),
@@ -627,12 +630,12 @@ import 'package:flutter/material.dart';
 void main() {
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
-    home: DashboardScreen(),
+    home: AppDrawer(),
   ));
 }
 
-class DashboardScreen extends StatelessWidget {
-  const DashboardScreen({super.key});
+class AppDrawer extends StatelessWidget {
+  const AppDrawer({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -647,7 +650,7 @@ class DashboardScreen extends StatelessWidget {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            // Header File / Section
+            // User Profile Header
             UserAccountsDrawerHeader(
               decoration: const BoxDecoration(
                 color: Colors.deepPurple,
@@ -657,10 +660,10 @@ class DashboardScreen extends StatelessWidget {
                 child: Icon(Icons.person, size: 45, color: Colors.deepPurple),
               ),
               accountName: const Text(
-                "Awais Ali Raza",
+                "Jahanzaib Ali",
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
-              accountEmail: const Text("awais@mindsync.com"),
+              accountEmail: const Text("Jahanzaib@mindsync.com"),
             ),
 
             // Navigation Items
@@ -700,6 +703,7 @@ class DashboardScreen extends StatelessWidget {
               title: const Text('More'),
               onTap: () {},
             ),
+            // Logout Button
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
               title: const Text('Logout', style: TextStyle(color: Colors.red)),
