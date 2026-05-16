@@ -1,0 +1,1344 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:video_player/video_player.dart';
+
+import '../../services/plan_access_service.dart';
+import '../../config/api_config.dart';
+import 'face_scan_record_screen.dart';
+
+class FaceScanScreen extends StatefulWidget {
+  const FaceScanScreen({super.key, this.autoOpenCamera = false});
+
+  /// When true (e.g. from More → Face Scan), opens the device camera immediately.
+  final bool autoOpenCamera;
+
+  @override
+  State<FaceScanScreen> createState() => _FaceScanScreenState();
+}
+
+class _FaceScanScreenState extends State<FaceScanScreen> {
+  static const int _maxVideoDurationSeconds = 30;
+  final ImagePicker _picker = ImagePicker();
+  VideoPlayerController? _videoController;
+  VideoPlayerController? _sourceVideoController;
+  XFile? _selectedVideo;
+  String? _analyzedVideoUrl;
+  Map<String, dynamic>? _result;
+  Map<String, dynamic>? _imageMoodResult;
+  Map<String, dynamic>? _videoMoodResult;
+  bool _loading = false;
+  String _stage = 'Preparing...';
+  double _progress = 0.0;
+  Timer? _progressTimer;
+  AnalysisMode _analysisMode = AnalysisMode.fast;
+  bool _featureAllowed = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _ensureAccess();
+    if (widget.autoOpenCamera) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted || _loading || !_featureAllowed) return;
+        await _pickRecordedVideo();
+      });
+    }
+  }
+
+  Future<void> _ensureAccess() async {
+    final allowed = await PlanAccessService.instance.canAccess(
+      'emotion_detection_full',
+      forceRefresh: true,
+    );
+    if (!mounted) return;
+    if (!allowed) {
+      setState(() => _featureAllowed = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Upgrade your plan to access this feature.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  Future<http.MultipartFile> _toMultipartFile({
+    required String fieldName,
+    required XFile file,
+  }) async {
+    if (kIsWeb) {
+      final bytes = await file.readAsBytes();
+      return http.MultipartFile.fromBytes(
+        fieldName,
+        bytes,
+        filename: file.name.isNotEmpty ? file.name : 'upload.mp4',
+      );
+    }
+    return http.MultipartFile.fromPath(fieldName, file.path);
+  }
+
+  Future<void> _pickRecordedVideo() async {
+    final recorded = await Navigator.of(context).push<XFile>(
+      MaterialPageRoute(builder: (_) => const FaceScanRecordScreen()),
+    );
+    if (recorded == null) return;
+    _selectedVideo = recorded;
+    await _initSourceVideoController(recorded);
+    await _processVideo(scanType: 'recorded');
+  }
+
+  Future<void> _pickUploadedVideo() async {
+    final file = await _picker.pickVideo(source: ImageSource.gallery);
+    if (file == null) return;
+    final ok = await _validateUploadedVideo(file);
+    if (!ok) return;
+    _selectedVideo = file;
+    await _initSourceVideoController(file);
+    await _processVideo(scanType: 'uploaded');
+  }
+
+  Future<void> _initSourceVideoController(XFile file) async {
+    await _sourceVideoController?.dispose();
+    try {
+      final c = kIsWeb
+          ? VideoPlayerController.networkUrl(Uri.parse(file.path))
+          : VideoPlayerController.file(File(file.path));
+      await c.initialize().timeout(const Duration(seconds: 15));
+      if (!mounted) {
+        await c.dispose();
+        return;
+      }
+      setState(() => _sourceVideoController = c);
+    } catch (_) {
+      _sourceVideoController = null;
+    }
+  }
+
+  Future<bool> _validateUploadedVideo(XFile file) async {
+    final lower = file.name.toLowerCase();
+    final supported = ['.mp4', '.mov', '.webm', '.avi', '.mkv'];
+    if (!supported.any(lower.endsWith)) {
+      _show('Unsupported format. Use MP4/MOV/WEBM/AVI/MKV.');
+      return false;
+    }
+    try {
+      // Quick local integrity check before sending to backend pipeline.
+      final c = kIsWeb
+          ? VideoPlayerController.networkUrl(Uri.parse(file.path))
+          : VideoPlayerController.file(File(file.path));
+      await c.initialize();
+      final dur = c.value.duration.inSeconds;
+      await c.dispose();
+      if (dur > _maxVideoDurationSeconds) {
+        _show('Video must be $_maxVideoDurationSeconds seconds or less.');
+        return false;
+      }
+      return true;
+    } catch (_) {
+      _show('Invalid video file. Please upload another video.');
+      return false;
+    }
+  }
+
+  Future<VideoPlayerController?> _initAnalyzedVideoController(
+    String analyzedVideoUrlRaw,
+  ) async {
+    if (analyzedVideoUrlRaw.isEmpty) return null;
+    final resolved = analyzedVideoUrlRaw.startsWith('http')
+        ? analyzedVideoUrlRaw
+        : '${ApiConfig.baseUrl}$analyzedVideoUrlRaw';
+    final uri = Uri.tryParse(resolved);
+    if (uri == null) return null;
+    try {
+      final c = VideoPlayerController.networkUrl(uri);
+      await c.initialize().timeout(const Duration(seconds: 20));
+      if (!c.value.isInitialized || c.value.hasError) {
+        await c.dispose();
+        return null;
+      }
+      c.setLooping(false);
+      return c;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _startProgressAnimation() {
+    _progressTimer?.cancel();
+    _progress = 0.0;
+    _progressTimer = Timer.periodic(const Duration(milliseconds: 450), (t) {
+      if (!mounted || !_loading) return;
+      setState(() {
+        _progress = (_progress + 0.06).clamp(0.0, 0.93);
+      });
+    });
+  }
+
+  Future<void> _processVideo({required String scanType}) async {
+    final allowed = await PlanAccessService.instance.canAccess(
+      'emotion_detection_full',
+      forceRefresh: true,
+    );
+    if (!allowed) {
+      _show('Upgrade your plan to access this feature.');
+      return;
+    }
+
+    final video = _selectedVideo;
+    if (video == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth.accessToken') ?? '';
+    if (token.isEmpty) {
+      _show('Please login again to continue.');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _stage = 'Uploading video...';
+      _result = null;
+      _analyzedVideoUrl = null;
+    });
+    _startProgressAnimation();
+
+    try {
+      final selectedFast = _analysisMode == AnalysisMode.fast;
+
+      Future<Map<String, dynamic>> runAnalyze({
+        required bool fastMode,
+      }) async {
+        final request = http.MultipartRequest(
+          'POST',
+          Uri.parse('${ApiConfig.baseUrl}/api/face/behavior/analyze/'),
+        );
+        request.headers['Authorization'] = 'Bearer $token';
+        request.fields['source_type'] = 'random_usage';
+        request.fields['scan_type'] = scanType;
+        request.fields['fast_mode'] = fastMode ? 'true' : 'false';
+        request.fields['include_media'] = 'true';
+        request.fields['include_deepface_results'] = 'true';
+        request.files.add(
+          await _toMultipartFile(fieldName: 'video', file: video),
+        );
+
+        final streamed = await request.send().timeout(
+          Duration(minutes: fastMode ? 6 : 8),
+        );
+        final resp = await http.Response.fromStream(streamed);
+        final body = jsonDecode(resp.body) as Map<String, dynamic>;
+        if (resp.statusCode < 200 || resp.statusCode >= 300) {
+          throw Exception((body['error'] ?? 'Face analysis failed').toString());
+        }
+        return body;
+      }
+
+      setState(
+        () => _stage = selectedFast
+            ? 'Running fast OpenFace analysis with tracked video...'
+            : 'Running high-accuracy analysis...',
+      );
+      var body = await runAnalyze(fastMode: selectedFast);
+      var analyzedVideoUrlRaw = (body['analyzed_video_url'] ?? '').toString();
+
+      // If fast pipeline misses tracked media, auto-retry once in high-accuracy mode.
+      if (analyzedVideoUrlRaw.isEmpty && selectedFast) {
+        if (mounted) {
+          setState(() {
+            _stage = 'Tracked video missing, retrying in high-accuracy mode...';
+          });
+        }
+        body = await runAnalyze(fastMode: false);
+        analyzedVideoUrlRaw = (body['analyzed_video_url'] ?? '').toString();
+      }
+
+      await _videoController?.dispose();
+      final controller = await _initAnalyzedVideoController(
+        analyzedVideoUrlRaw,
+      );
+      final resolvedVideoUrl = analyzedVideoUrlRaw.isNotEmpty
+          ? (analyzedVideoUrlRaw.startsWith('http')
+                ? analyzedVideoUrlRaw
+                : '${ApiConfig.baseUrl}$analyzedVideoUrlRaw')
+          : null;
+      if (!mounted) return;
+      setState(() {
+        _result = body;
+        _analyzedVideoUrl = resolvedVideoUrl;
+        _videoController = controller;
+        _progress = 1.0;
+        _stage = 'Completed';
+      });
+      if (_analyzedVideoUrl != null && _videoController == null) {
+        _show(
+          'Analysis completed, but this browser cannot play the processed codec.',
+        );
+      }
+      final processingMs = int.tryParse('${body['processing_time_ms'] ?? 0}') ?? 0;
+      _show(
+        processingMs > 0
+            ? 'Deep face analysis complete in ${(processingMs / 1000).toStringAsFixed(1)}s.'
+            : 'Deep face analysis complete.',
+      );
+    } on TimeoutException {
+      _show('Analysis timeout. Please try again.');
+    } catch (e) {
+      _show('Unable to process scan right now. $e');
+    } finally {
+      _progressTimer?.cancel();
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<bool> _ensureMoodCameraPermission({bool includeMic = false}) async {
+    if (kIsWeb) return false;
+    final cam = await Permission.camera.request();
+    if (!cam.isGranted) {
+      _show('Camera permission is required for mood capture.');
+      return false;
+    }
+    if (includeMic) {
+      await Permission.microphone.request();
+    }
+    return true;
+  }
+
+  Future<void> _openMoodCaptureSheet() async {
+    if (_loading) return;
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take photo'),
+              subtitle: const Text('Front camera'),
+              onTap: () => Navigator.pop(ctx, 'photo'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam_outlined),
+              title: const Text('Record video'),
+              subtitle: const Text('Front camera · up to 10s'),
+              onTap: () => Navigator.pop(ctx, 'video'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(ctx, 'gallery'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'photo') {
+      await _captureMoodPhotoFromCamera();
+    } else if (choice == 'video') {
+      await _captureMoodVideoFromCamera();
+    } else if (choice == 'gallery') {
+      await _openMoodGalleryChooser();
+    }
+  }
+
+  Future<void> _openMoodGalleryChooser() async {
+    if (!mounted) return;
+    final kind = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('Image from gallery'),
+              onTap: () => Navigator.pop(ctx, 'img'),
+            ),
+            ListTile(
+              title: const Text('Video from gallery'),
+              onTap: () => Navigator.pop(ctx, 'vid'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || kind == null) return;
+    if (kind == 'img') await _runMoodImageFromGallery();
+    if (kind == 'vid') await _runMoodVideoFromGallery();
+  }
+
+  Future<void> _captureMoodPhotoFromCamera() async {
+    if (!await _ensureMoodCameraPermission()) return;
+    final file = await _picker.pickImage(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.front,
+    );
+    if (file == null) return;
+    await _runMoodImageWithFile(file);
+  }
+
+  Future<void> _captureMoodVideoFromCamera() async {
+    if (!await _ensureMoodCameraPermission(includeMic: true)) return;
+    final file = await _picker.pickVideo(
+      source: ImageSource.camera,
+      preferredCameraDevice: CameraDevice.front,
+      maxDuration: const Duration(seconds: 10),
+    );
+    if (file == null) return;
+    await _runMoodVideoWithFile(file);
+  }
+
+  Future<void> _runMoodImageFromGallery() async {
+    final file = await _picker.pickImage(source: ImageSource.gallery);
+    if (file == null) return;
+    await _runMoodImageWithFile(file);
+  }
+
+  Future<void> _runMoodVideoFromGallery() async {
+    final file = await _picker.pickVideo(source: ImageSource.gallery);
+    if (file == null) return;
+    await _runMoodVideoWithFile(file);
+  }
+
+  Future<void> _runMoodImageWithFile(XFile file) async {
+    setState(() {
+      _loading = true;
+      _stage = 'Running mood analysis on image...';
+    });
+    _startProgressAnimation();
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiConfig.baseUrl}/api/analyze-image/'),
+      );
+      request.files.add(await _toMultipartFile(fieldName: 'image', file: file));
+      final streamed = await request.send().timeout(
+        const Duration(seconds: 90),
+      );
+      final response = await http.Response.fromStream(streamed);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _show('Image mood detection failed.');
+        return;
+      }
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _imageMoodResult = data;
+        _progress = 1.0;
+      });
+      _show('Image mood detection complete.');
+    } catch (_) {
+      _show('Unable to run image mood detection.');
+    } finally {
+      _progressTimer?.cancel();
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<void> _runMoodVideoWithFile(XFile file) async {
+    setState(() {
+      _loading = true;
+      _stage = 'Running mood analysis on video...';
+    });
+    _startProgressAnimation();
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('${ApiConfig.baseUrl}/api/analyze-video/'),
+      );
+      request.files.add(await _toMultipartFile(fieldName: 'video', file: file));
+      final streamed = await request.send().timeout(
+        const Duration(seconds: 120),
+      );
+      final response = await http.Response.fromStream(streamed);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _show('Video mood detection failed.');
+        return;
+      }
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _videoMoodResult = data;
+        _progress = 1.0;
+      });
+      _show('Video mood detection complete.');
+    } catch (_) {
+      _show('Unable to run video mood detection.');
+    } finally {
+      _progressTimer?.cancel();
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  void _show(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  @override
+  void dispose() {
+    _progressTimer?.cancel();
+    _videoController?.dispose();
+    _sourceVideoController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_featureAllowed) {
+      return const Scaffold(
+        body: SafeArea(child: SizedBox.shrink()),
+      );
+    }
+    final result = _result;
+    final stress = int.tryParse('${result?['stress_score'] ?? 0}') ?? 0;
+    final anxiety = int.tryParse('${result?['anxiety_score'] ?? 0}') ?? 0;
+    final depression = int.tryParse('${result?['depression_score'] ?? 0}') ?? 0;
+    final dominant = (result?['dominant_state'] ?? 'unknown').toString();
+    final severity =
+        int.tryParse('${result?['overall_severity_score'] ?? 0}') ?? 0;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF3F4FA),
+      appBar: AppBar(
+        title: const Text('Deep Face Analysis'),
+        backgroundColor: const Color(0xFFF3F4FA),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 30),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6F39E8), Color(0xFF4B2AAD)],
+              ),
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6F39E8).withOpacity(0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Deep Face Analysis',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  'OpenFace tracked video + stress, anxiety, depression insights',
+                  style: TextStyle(fontSize: 12, color: Color(0xFFE8DDFF)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          _ScanOptionTile(
+            title: 'Record From Camera',
+            subtitle: 'Record face video with timer (max ${_maxVideoDurationSeconds}s)',
+            icon: Icons.videocam_rounded,
+            onTap: _loading ? null : _pickRecordedVideo,
+          ),
+          const SizedBox(height: 10),
+          _ScanOptionTile(
+            title: 'Upload Existing Video',
+            subtitle: 'Upload a face video from gallery/files',
+            icon: Icons.upload_file_rounded,
+            onTap: _loading ? null : _pickUploadedVideo,
+          ),
+          const SizedBox(height: 10),
+          _AnalysisModeToggle(
+            mode: _analysisMode,
+            onChanged: _loading ? null : (mode) => setState(() => _analysisMode = mode),
+          ),
+          if (_loading) ...[
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE5DDFB)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _stage,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  LinearProgressIndicator(
+                    value: _progress <= 0 ? null : _progress,
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (_videoController != null &&
+              _videoController!.value.isInitialized) ...[
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE8EAF3)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE9FBF6),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'OPENFACE TRACKED',
+                          style: TextStyle(
+                            color: Color(0xFF0D8E73),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      const Text(
+                        'Landmarks + AU',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF7B7F90),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: AspectRatio(
+                      aspectRatio: _videoController!.value.aspectRatio,
+                      child: VideoPlayer(_videoController!),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  VideoProgressIndicator(
+                    _videoController!,
+                    allowScrubbing: true,
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                  ),
+                  Row(
+                    children: [
+                      IconButton(
+                        onPressed: () async {
+                          await _videoController!.seekTo(Duration.zero);
+                          await _videoController!.play();
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.replay_rounded),
+                      ),
+                      IconButton(
+                        onPressed: () async {
+                          if (_videoController!.value.isPlaying) {
+                            await _videoController!.pause();
+                          } else {
+                            await _videoController!.play();
+                          }
+                          setState(() {});
+                        },
+                        icon: Icon(
+                          _videoController!.value.isPlaying
+                              ? Icons.pause_circle_filled_rounded
+                              : Icons.play_circle_fill_rounded,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${_videoController!.value.position.inSeconds}s / ${_videoController!.value.duration.inSeconds}s',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF6E7381),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ] else if (result != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7E8),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFFE2A9)),
+              ),
+              child: const Text(
+                'Analyzed tracked video is not available for this result. Try High Accuracy mode for richer output.',
+                style: TextStyle(
+                  color: Color(0xFF7A5B00),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+          if (result != null) ...[
+            const SizedBox(height: 18),
+            _AnalysisSessionCard(
+              dominant: dominant,
+              severity: severity,
+              stress: stress,
+              anxiety: anxiety,
+              depression: depression,
+              behavioralInsights:
+                  (result['behavioral_insights'] as List<dynamic>? ?? const [])
+                      .map((e) => e.toString())
+                      .toList(),
+              recommendations:
+                  (result['recommendations'] as List<dynamic>? ?? const [])
+                      .map((e) => e.toString())
+                      .toList(),
+              aus: (result['au_summary'] as List<dynamic>? ?? const [])
+                  .whereType<Map<String, dynamic>>()
+                  .toList(),
+              activeAus: (result['active_aus'] as List<dynamic>? ?? const [])
+                  .map((e) => e.toString())
+                  .toList(),
+              matchedAusByState:
+                  (result['matched_aus_by_state'] as Map<String, dynamic>?) ??
+                      const {},
+              stateProbabilities:
+                  (result['state_probabilities'] as Map<String, dynamic>?) ??
+                      const {},
+              deepfaceDominant:
+                  (result['deepface_dominant_emotion'] ?? '').toString(),
+              deepfaceFrames:
+                  int.tryParse('${result['deepface_frames_analyzed'] ?? 0}') ?? 0,
+              deepfaceSummary:
+                  (result['deepface_emotion_summary'] as Map<String, dynamic>?) ??
+                      const {},
+              topStates:
+                  ((result['score_breakdown']?['dominant_states']
+                              as List<dynamic>?) ??
+                          const [])
+                      .map((e) => e.toString().toUpperCase())
+                      .toList(),
+            ),
+          ],
+          const SizedBox(height: 22),
+          const Text(
+            'Mood Detector',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Previous model options (image/video mood scan)',
+            style: TextStyle(fontSize: 12, color: Color(0xFF6E7381)),
+          ),
+          const SizedBox(height: 10),
+          _ScanOptionTile(
+            title: 'Mood scan (image)',
+            subtitle: 'Capture photo with front camera',
+            icon: Icons.photo_camera_outlined,
+            onTap: _loading ? null : _captureMoodPhotoFromCamera,
+          ),
+          const SizedBox(height: 10),
+          _ScanOptionTile(
+            title: 'Mood scan (video)',
+            subtitle: 'Record short video with front camera',
+            icon: Icons.videocam_outlined,
+            onTap: _loading ? null : _captureMoodVideoFromCamera,
+          ),
+          const SizedBox(height: 10),
+          _ScanOptionTile(
+            title: 'Mood from gallery (optional)',
+            subtitle: 'Only if you already have a saved file',
+            icon: Icons.photo_library_outlined,
+            onTap: _loading ? null : _openMoodGalleryChooser,
+          ),
+          if (_imageMoodResult != null) ...[
+            const SizedBox(height: 8),
+            _SimpleMoodResultCard(
+              title: 'Image Mood Result',
+              payload: _imageMoodResult!,
+            ),
+          ],
+          if (_videoMoodResult != null) ...[
+            const SizedBox(height: 8),
+            _SimpleMoodResultCard(
+              title: 'Video Mood Result',
+              payload: _videoMoodResult!,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ScanOptionTile extends StatelessWidget {
+  const _ScanOptionTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE4E6EE)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: const Color(0xFF6F39E8)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF6E7381),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+enum AnalysisMode { fast, accurate }
+
+class _AnalysisModeToggle extends StatelessWidget {
+  const _AnalysisModeToggle({required this.mode, required this.onChanged});
+
+  final AnalysisMode mode;
+  final ValueChanged<AnalysisMode>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE4E6EE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Analysis Mode',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _ModeChip(
+                  label: 'Fast',
+                  selected: mode == AnalysisMode.fast,
+                  subtitle: 'Low response time',
+                  onTap: onChanged == null ? null : () => onChanged!(AnalysisMode.fast),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ModeChip(
+                  label: 'High Accuracy',
+                  selected: mode == AnalysisMode.accurate,
+                  subtitle: 'More detailed results',
+                  onTap: onChanged == null ? null : () => onChanged!(AnalysisMode.accurate),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  const _ModeChip({
+    required this.label,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF6F39E8) : const Color(0xFFF6F4FF),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : const Color(0xFF3A3B46),
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: selected ? const Color(0xFFDACEFF) : const Color(0xFF7A7C8A),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnalysisSessionCard extends StatelessWidget {
+  const _AnalysisSessionCard({
+    required this.dominant,
+    required this.severity,
+    required this.stress,
+    required this.anxiety,
+    required this.depression,
+    required this.behavioralInsights,
+    required this.recommendations,
+    required this.aus,
+    required this.activeAus,
+    required this.matchedAusByState,
+    required this.stateProbabilities,
+    required this.deepfaceDominant,
+    required this.deepfaceFrames,
+    required this.deepfaceSummary,
+    required this.topStates,
+  });
+
+  final String dominant;
+  final int severity;
+  final int stress;
+  final int anxiety;
+  final int depression;
+  final List<String> behavioralInsights;
+  final List<String> recommendations;
+  final List<Map<String, dynamic>> aus;
+  final List<String> activeAus;
+  final Map<String, dynamic> matchedAusByState;
+  final Map<String, dynamic> stateProbabilities;
+  final String deepfaceDominant;
+  final int deepfaceFrames;
+  final Map<String, dynamic> deepfaceSummary;
+  final List<String> topStates;
+
+  @override
+  Widget build(BuildContext context) {
+    final topText = topStates.isEmpty ? 'N/A' : topStates.join(', ');
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE8EAF3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Analysis Session Summary',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text('Dominant State: ${dominant.toUpperCase()}'),
+          Text('Overall Severity: $severity%'),
+          Text('Top Match States: $topText'),
+          const SizedBox(height: 10),
+          _ScoreCard(title: 'Stress Score', value: stress, color: const Color(0xFFEF4444)),
+          const SizedBox(height: 8),
+          _ScoreCard(title: 'Anxiety Score', value: anxiety, color: const Color(0xFFF59E0B)),
+          const SizedBox(height: 8),
+          _ScoreCard(title: 'Depression Score', value: depression, color: const Color(0xFF8B5CF6)),
+          const SizedBox(height: 10),
+          _BulletCard(title: 'Facial Behavior Insights', items: behavioralInsights),
+          const SizedBox(height: 10),
+          _BulletCard(title: 'AI Recommendations', items: recommendations),
+          const SizedBox(height: 10),
+          _AusCard(aus: aus),
+          const SizedBox(height: 10),
+          _BulletCard(title: 'Active AUs (Actual OpenFace Detection)', items: activeAus),
+          const SizedBox(height: 10),
+          _AuDiseaseRelationCard(map: matchedAusByState),
+          const SizedBox(height: 10),
+          _StateProbabilityCard(probabilities: stateProbabilities),
+          const SizedBox(height: 10),
+          _DeepFaceSummaryCard(
+            dominant: deepfaceDominant,
+            framesAnalyzed: deepfaceFrames,
+            summary: deepfaceSummary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScoreCard extends StatelessWidget {
+  const _ScoreCard({
+    required this.title,
+    required this.value,
+    required this.color,
+  });
+
+  final String title;
+  final int value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final safe = value.clamp(0, 100);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: safe / 100,
+            color: color,
+            backgroundColor: color.withOpacity(0.15),
+          ),
+          const SizedBox(height: 6),
+          Text('$safe%'),
+        ],
+      ),
+    );
+  }
+}
+
+class _BulletCard extends StatelessWidget {
+  const _BulletCard({required this.title, required this.items});
+  final String title;
+  final List<String> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          if (items.isEmpty)
+            const Text(
+              'No data available',
+              style: TextStyle(color: Color(0xFF6E7381)),
+            ),
+          ...items.map(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 5),
+              child: Text('• $item'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AusCard extends StatelessWidget {
+  const _AusCard({required this.aus});
+  final List<Map<String, dynamic>> aus;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Detected Action Unit Summary',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          if (aus.isEmpty)
+            const Text(
+              'No AU highlights detected',
+              style: TextStyle(color: Color(0xFF6E7381)),
+            ),
+          ...aus.take(6).map((au) {
+            final name = (au['au'] ?? '').toString();
+            final mean = (au['mean_intensity'] ?? 0).toString();
+            final max = (au['max_intensity'] ?? 0).toString();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text('$name  • mean: $mean  • max: $max'),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _SimpleMoodResultCard extends StatelessWidget {
+  const _SimpleMoodResultCard({required this.title, required this.payload});
+
+  final String title;
+  final Map<String, dynamic> payload;
+
+  @override
+  Widget build(BuildContext context) {
+    final prediction =
+        (payload['prediction'] ?? payload['emotion'] ?? 'Unknown').toString();
+    final confidence = (payload['confidence'] ?? '').toString();
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text('Prediction: $prediction'),
+          if (confidence.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Confidence: $confidence'),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DeepFaceSummaryCard extends StatelessWidget {
+  const _DeepFaceSummaryCard({
+    required this.dominant,
+    required this.framesAnalyzed,
+    required this.summary,
+  });
+
+  final String dominant;
+  final int framesAnalyzed;
+  final Map<String, dynamic> summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = summary.entries.toList()
+      ..sort(
+        (a, b) => (num.tryParse('${b.value}') ?? 0).compareTo(
+          num.tryParse('${a.value}') ?? 0,
+        ),
+      );
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'DeepFace Emotion Summary (Actual)',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Dominant Emotion: ${dominant.isEmpty ? 'N/A' : dominant.toUpperCase()}',
+          ),
+          Text('Frames analyzed: $framesAnalyzed'),
+          const SizedBox(height: 6),
+          if (entries.isEmpty)
+            const Text(
+              'No DeepFace samples available',
+              style: TextStyle(color: Color(0xFF6E7381)),
+            ),
+          ...entries.take(6).map((e) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text('${e.key}: ${e.value}'),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuDiseaseRelationCard extends StatelessWidget {
+  const _AuDiseaseRelationCard({required this.map});
+
+  final Map<String, dynamic> map;
+
+  @override
+  Widget build(BuildContext context) {
+    final states = ['stress', 'anxiety', 'depression'];
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'AU Relation With Conditions',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          ...states.map((state) {
+            final rows = (map[state] as List<dynamic>? ?? const [])
+                .whereType<Map<String, dynamic>>()
+                .toList();
+            final top = rows
+                .where((r) => (r['mean_intensity'] as num?) != null)
+                .toList()
+              ..sort(
+                (a, b) => ((b['mean_intensity'] as num?) ?? 0).compareTo(
+                  ((a['mean_intensity'] as num?) ?? 0),
+                ),
+              );
+            final label = state[0].toUpperCase() + state.substring(1);
+            final summary = top.take(3).map((r) {
+              final au = (r['au'] ?? '').toString();
+              final v = ((r['mean_intensity'] as num?) ?? 0).toDouble();
+              return '$au(${v.toStringAsFixed(2)})';
+            }).join(', ');
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '$label: ${summary.isEmpty ? 'No AU data' : summary}',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF434859)),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class _StateProbabilityCard extends StatelessWidget {
+  const _StateProbabilityCard({required this.probabilities});
+
+  final Map<String, dynamic> probabilities;
+
+  @override
+  Widget build(BuildContext context) {
+    final stress = ((probabilities['stress'] as num?) ?? 0).toDouble();
+    final anxiety = ((probabilities['anxiety'] as num?) ?? 0).toDouble();
+    final depression = ((probabilities['depression'] as num?) ?? 0).toDouble();
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9FF),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Condition Probability (AU-based)',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text('Stress: ${(stress * 100).toStringAsFixed(1)}%'),
+          Text('Anxiety: ${(anxiety * 100).toStringAsFixed(1)}%'),
+          Text('Depression: ${(depression * 100).toStringAsFixed(1)}%'),
+        ],
+      ),
+    );
+  }
+}
