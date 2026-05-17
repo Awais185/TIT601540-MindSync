@@ -1,7 +1,7 @@
 // Lab 8 of MAD
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
-
+// Welcome screen for MindSync onboarding experience
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key, required this.onGetStarted});
 
@@ -15,9 +15,10 @@ class WelcomeScreen extends StatelessWidget {
         child: Stack(
           children: [
             Positioned(
-              top: 16,
-              right: 20,
-              left: 1,
+              top: 17,
+              right: 22,
+              left: 2,
+              // Skip onboarding and navigate to login screen
               child: TextButton(
                 onPressed: () {
                   onGetStarted();
@@ -45,7 +46,7 @@ class WelcomeScreen extends StatelessWidget {
               ),
             ),
 
-            // Main Content
+            // Main onboarding content section
             LayoutBuilder(
               builder: (context, constraints) => SingleChildScrollView(
                 child: ConstrainedBox(
@@ -58,8 +59,8 @@ class WelcomeScreen extends StatelessWidget {
 
                         // Logo Container with overlapping circles
                         Container(
-                          width: 160,
-                          height: 160,
+                          width: 180,
+                          height: 180,
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.4),
                             borderRadius: BorderRadius.circular(44),
@@ -226,7 +227,7 @@ class WelcomeScreen extends StatelessWidget {
 
                         const SizedBox(height: 32),
 
-                        // Get Started Button
+                        // User login and authentication interface
                         SizedBox(
                           width: double.infinity,
                           height: 60,
@@ -303,7 +304,7 @@ class LoginScreen extends StatefulWidget {
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
-
+// Controllers for handling user input
 class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -316,7 +317,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _passwordController.dispose();
     super.dispose();
   }
-
+// Validate credentials and authenticate user
   Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -491,7 +492,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-
+// Reusable input field widget
 class _AuthField extends StatelessWidget {
   const _AuthField({
     required this.hint,
@@ -501,7 +502,17 @@ class _AuthField extends StatelessWidget {
   final String hint;
   final TextEditingController controller;
   final bool obscure;
+String greeting() {
+  final hour = DateTime.now().hour;
 
+  if (hour < 12) {
+    return "Good Morning 🌞";
+  } else if (hour < 17) {
+    return "Good Afternoon ☀️";
+  } else {
+    return "Good Evening 🌙";
+  }
+}
   @override
   Widget build(BuildContext context) {
     return TextField(
