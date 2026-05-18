@@ -154,3 +154,26 @@ class AnalyticsScreenState extends State<AnalyticsScreen> with SingleTickerProvi
     _controller.forward();
   }
 
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Analytics")),
+      body: FadeTransition(
+        opacity: slide,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: const [
+            ListTile(
+              leading: Icon(Icons.monitor_heart),
+              title: Text("Wellbeing Score: 78"),
+            ), // ListTile
+            ListTile(
+              leading: Icon(Icons.phone_android),
+              title: Text("Screen Time: 0m"),
+            ), // ListTile
+          ],
+        ), // ListView
+      ), // FadeTransition
+    ); // Scaffold
+  }
+}
