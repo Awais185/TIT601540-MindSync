@@ -1,0 +1,36 @@
+{
+  "firestore": {
+    "database": "(default)",
+    "location": "asia-east1",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true
+    }
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "mindsync-c6917",
+          "appId": "1:785569217251:android:25e0ceb69c220c12e1e3d6",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "mindsync-c6917",
+          "configurations": {
+            "android": "1:785569217251:android:25e0ceb69c220c12e1e3d6",
+            "ios": "1:785569217251:ios:e49b12a62519b76de1e3d6",
+            "macos": "1:785569217251:ios:e49b12a62519b76de1e3d6",
+            "web": "1:785569217251:web:c1de5d7ff4597f3ae1e3d6",
+            "windows": "1:785569217251:web:2e02a6335dd8ed99e1e3d6"
+          }
+        }
+      }
+    }
+  }
+}
